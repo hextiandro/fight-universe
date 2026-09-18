@@ -1,0 +1,35 @@
+[project]
+name = "ufc-ingest"
+version = "0.1.0"
+description = "Pipeline de datos de UFC Graph: ingestión, resolución de entidades y publicación"
+requires-python = ">=3.12"
+dependencies = [
+  "psycopg[binary]>=3.2",
+  "pydantic>=2.9",
+  "pydantic-settings>=2.6",
+  "httpx>=0.27",
+  "typer>=0.15",
+]
+
+[project.scripts]
+ufc-ingest = "ufc_ingest.cli:app"
+
+[dependency-groups]
+dev = ["pytest>=8.3", "ruff>=0.8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ufc_ingest"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
