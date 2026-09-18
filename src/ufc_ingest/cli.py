@@ -5,8 +5,9 @@ from pathlib import Path
 
 import typer
 
-from . import migrate, publish, seed_import
-from .db import connect, safe_url
+from .db.connection import connect, safe_url
+from .db.migrations import run as run_migrations
+from .pipeline import parity, publish, seed_import
 
 app = typer.Typer(help="Pipeline de datos de UFC Graph", no_args_is_help=True)
 
@@ -28,7 +29,7 @@ TABLES = [
 def migrate_db() -> None:
     """Aplica las migraciones pendientes de `schema/`."""
     typer.echo(f"Base de datos: {safe_url()}")
-    done = migrate.run()
+    done = run_migrations()
     typer.echo("Sin migraciones pendientes." if not done else f"Aplicadas: {', '.join(done)}")
 
 
@@ -67,25 +68,9 @@ def publish_graph(out: Path = OUT_OPTION) -> None:
 @app.command()
 def verify_parity(seed: Path = SEED_OPTION) -> None:
     """Comprueba que el grafo reconstruido es idéntico al dataset semilla."""
-    original = json.loads(seed.read_text())
     with connect() as conn:
         rebuilt = publish.build(conn)
-
-    problems: list[str] = []
-    for key, rebuilt_items in rebuilt.items():
-        source_items = original[key]
-        if key == "fighters":  # la semilla trae la imagen aparte; se compara sin ella
-            source_items = [{k: v for k, v in f.items() if k != "image"} for f in source_items]
-        by_id = {item["id"]: item for item in source_items}
-        for item in rebuilt_items:
-            expected = by_id.pop(item["id"], None)
-            if expected is None:
-                problems.append(f"{key}: sobra {item['id']}")
-            elif json.dumps(expected, sort_keys=True, ensure_ascii=False) != json.dumps(
-                item, sort_keys=True, ensure_ascii=False
-            ):
-                problems.append(f"{key}: difiere {item['id']}")
-        problems.extend(f"{key}: falta {missing}" for missing in by_id)
+    problems = parity.compare(seed, rebuilt)
 
     if problems:
         typer.echo(f"✗ {len(problems)} diferencias:")

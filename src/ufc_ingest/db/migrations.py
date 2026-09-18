@@ -7,8 +7,8 @@ Postgres local, para Supabase o para cualquier otro proveedor.
 import hashlib
 from pathlib import Path
 
-from .config import settings
-from .db import connect
+from ..config import settings
+from .connection import connect
 
 TRACKING_TABLE = """
 create table if not exists schema_migrations (

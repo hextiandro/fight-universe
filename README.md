@@ -44,16 +44,36 @@ uv run pytest -q
 
 ## Estructura
 
+Puertos y adaptadores. **Las dependencias apuntan hacia dentro**: `cli` → `pipeline` → `domain`.
+`db` y `connectors` son adaptadores; el dominio no sabe que existen.
+
 ```text
-schema/              migraciones SQL, única fuente de verdad del modelo
+schema/                  migraciones SQL: única fuente de verdad del modelo
 src/ufc_ingest/
-  config.py          configuración por entorno
-  db.py              acceso a Postgres (psycopg 3, SQL plano)
-  migrate.py         aplicador de migraciones
-  cli.py             comandos
-  connectors/        una carpeta por fuente
-tests/
+  cli.py                 comandos; sin lógica de negocio
+  config.py              configuración por entorno
+  domain/                el modelo, sin SQL ni HTTP
+    models.py            entidades y hechos (pydantic)
+    ids.py               identificadores opacos y estables
+    text.py              normalización compartida con la búsqueda
+  connectors/            adaptadores de entrada (una fuente = un archivo)
+    base.py              el contrato: fetch + extract; RawDoc, Mention, Candidate
+  db/                    adaptador de salida: aquí vive todo el SQL
+    connection.py
+    migrations.py
+    repositories/        escritura por agregado y lectura del grafo publicado
+  pipeline/              casos de uso
+    seed_import.py       dataset semilla → modelo canónico
+    publish.py           modelo canónico → grafo publicado
+    parity.py            comprobación de que no se perdió nada
+tests/                   refleja la misma estructura
 ```
+
+**Reglas que sostienen esto:**
+- Ningún `import psycopg` fuera de `db/`.
+- Ninguna llamada HTTP fuera de `connectors/`.
+- `domain/` no importa de `db/`, `connectors/` ni `pipeline/`.
+- Los casos de uso orquestan; no escriben SQL.
 
 ## Licencia y datos
 

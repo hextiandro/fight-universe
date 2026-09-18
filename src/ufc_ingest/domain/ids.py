@@ -34,13 +34,3 @@ def make_id(kind: str, seed: str, length: int = 12) -> str:
         raise ValueError(f"tipo de entidad desconocido: {kind}")
     digest = hashlib.sha256(f"{kind}:{seed}".encode()).digest()
     return f"{PREFIXES[kind]}_{_encode(digest, length)}"
-
-
-def normalize(text: str) -> str:
-    """Igual que la normalización de la web: minúsculas, sin acentos ni puntuación."""
-    import unicodedata
-
-    decomposed = unicodedata.normalize("NFD", text.lower())
-    stripped = "".join(c for c in decomposed if unicodedata.category(c) != "Mn")
-    cleaned = "".join(c if c.isalnum() else " " for c in stripped)
-    return " ".join(cleaned.split())

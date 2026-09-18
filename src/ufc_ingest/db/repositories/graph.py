@@ -1,4 +1,4 @@
-"""Reconstruye el grafo publicado desde el modelo canónico.
+"""Repositorio de lectura: reconstruye el grafo publicado desde el modelo canónico.
 
 Devuelve exactamente la forma que consume la web, con los slugs como identificadores
 públicos (los ids internos no salen). La comprobación de paridad compara este resultado

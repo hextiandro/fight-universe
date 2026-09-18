@@ -2,7 +2,8 @@
 
 import pytest
 
-from ufc_ingest.ids import make_id, normalize
+from ufc_ingest.domain.ids import make_id
+from ufc_ingest.domain.text import normalize
 
 
 def test_id_estable_entre_ejecuciones() -> None:
