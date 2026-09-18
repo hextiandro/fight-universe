@@ -14,10 +14,7 @@ def compare(seed_path: Path, rebuilt: dict[str, Any]) -> list[str]:
     problems: list[str] = []
 
     for key, rebuilt_items in rebuilt.items():
-        source_items = original[key]
-        if key == "fighters":  # la semilla trae la imagen aparte; se compara sin ella
-            source_items = [{k: v for k, v in f.items() if k != "image"} for f in source_items]
-        pending = {item["id"]: item for item in source_items}
+        pending = {item["id"]: item for item in original[key]}
 
         for item in rebuilt_items:
             expected = pending.pop(item["id"], None)
