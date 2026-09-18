@@ -1,16 +1,19 @@
 """Punto de entrada: `uv run ufc-ingest <comando>`."""
 
 import json
+import os
 from pathlib import Path
 
 import typer
 
 from .db.connection import connect, safe_url
 from .db.migrations import run as run_migrations
+from .db.repositories import roles
 from .pipeline import parity, publish, seed_import
 
 app = typer.Typer(help="Pipeline de datos de UFC Graph", no_args_is_help=True)
 
+WEB_ROLE_OPTION = typer.Option("ufc_web", "--role", help="Usuario de solo lectura de la web")
 SEED_OPTION = typer.Option(..., "--from", help="Ruta a seed.json exportado por la web")
 OUT_OPTION = typer.Option(None, "--out", help="Escribe el grafo publicado en un archivo")
 TABLES = [
@@ -41,6 +44,25 @@ def status() -> None:
         for table in TABLES:
             cur.execute(f"select count(*) as n from {table}")  # noqa: S608 - lista fija
             typer.echo(f"  {table:<16} {cur.fetchone()['n']}")
+
+
+@app.command()
+def set_web_password(role: str = WEB_ROLE_OPTION) -> None:
+    """Fija la contraseña del usuario de solo lectura (se lee de WEB_DB_PASSWORD)."""
+    password = os.environ.get("WEB_DB_PASSWORD")
+    if not password:
+        typer.echo("Falta WEB_DB_PASSWORD en el entorno.")
+        raise typer.Exit(1)
+    with connect() as conn, conn.cursor() as cur:
+        roles.set_web_password(cur, role, password)
+        conn.commit()
+        leaks = roles.can_read_tables(cur, role)
+    typer.echo(f"Contraseña fijada para {role}.")
+    typer.echo(
+        "✗ El usuario puede leer tablas directamente: revisa los permisos."
+        if leaks
+        else "✓ Sin acceso directo a tablas: solo published_graph()."
+    )
 
 
 @app.command()
