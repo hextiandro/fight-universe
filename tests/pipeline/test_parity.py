@@ -9,6 +9,7 @@ SEED = {
     "fighters": [{"id": "a", "name": "A", "divisionId": "heavyweight", "image": {"src": "x"}}],
     "events": [{"id": "e1", "name": "E", "date": "2026-01-01"}],
 }
+# La foto forma parte del grafo publicado, así que también se compara.
 
 
 def _seed_file(tmp_path: Path) -> Path:
@@ -19,7 +20,7 @@ def _seed_file(tmp_path: Path) -> Path:
 
 def test_identico_no_da_problemas(tmp_path: Path) -> None:
     rebuilt = {
-        "fighters": [{"id": "a", "name": "A", "divisionId": "heavyweight"}],
+        "fighters": [{"id": "a", "name": "A", "divisionId": "heavyweight", "image": {"src": "x"}}],
         "events": [{"id": "e1", "name": "E", "date": "2026-01-01"}],
     }
     assert parity.compare(_seed_file(tmp_path), rebuilt) == []
@@ -27,7 +28,7 @@ def test_identico_no_da_problemas(tmp_path: Path) -> None:
 
 def test_detecta_faltante_sobrante_y_diferencia(tmp_path: Path) -> None:
     rebuilt = {
-        "fighters": [{"id": "a", "name": "OTRO", "divisionId": "heavyweight"}],
+        "fighters": [{"id": "a", "name": "OTRO", "divisionId": "heavyweight", "image": {"src": "x"}}],
         "events": [{"id": "e2", "name": "E", "date": "2026-01-01"}],
     }
     problems = parity.compare(_seed_file(tmp_path), rebuilt)
