@@ -9,11 +9,14 @@ import typer
 from .connectors.wikipedia_events import WikipediaEvents
 from .db.connection import connect, safe_url
 from .db.migrations import run as run_migrations
+from .db.repositories import review as review_repo
 from .db.repositories import roles
-from .pipeline import parity, publish, resolve_event, seed_import
+from .pipeline import ingest_event, parity, publish, resolve_event, seed_import
+from .pipeline import review as review_flow
 
 app = typer.Typer(help="Pipeline de datos de UFC Graph", no_args_is_help=True)
 
+ACTOR_OPTION = typer.Option("human", "--actor", help="Quién revisa (queda en el registro)")
 EVENT_OPTION = typer.Option(..., "--event", help='Título en Wikipedia, p. ej. "UFC 327"')
 WEB_ROLE_OPTION = typer.Option("ufc_web", "--role", help="Usuario de solo lectura de la web")
 SEED_OPTION = typer.Option(..., "--from", help="Ruta a seed.json exportado por la web")
@@ -96,6 +99,53 @@ def resolve(event: str = EVENT_OPTION) -> None:
         typer.echo(f"  {mark} «{r.mention.text}» {detail}")
 
     typer.echo("\n" + " · ".join(f"{k}: {v}" for k, v in result.summary.items()))
+
+
+@app.command()
+def ingest(event: str = EVENT_OPTION) -> None:
+    """Ingiere un evento: aplica lo seguro y encola lo dudoso."""
+    typer.echo(f"Base de datos: {safe_url()}")
+    with connect() as conn:
+        report = ingest_event.run(event, conn)
+    for item in report.applied:
+        typer.echo(f"  ✓ {item}")
+    for item in report.queued:
+        typer.echo(f"  ? {item}")
+    typer.echo(f"\n{report.line()}")
+
+
+@app.command()
+def review(actor: str = ACTOR_OPTION, limit: int = 50) -> None:
+    """Revisa lo pendiente: [a] aprobar · [r] rechazar · [s] saltar · [q] salir."""
+    with connect() as conn, conn.cursor() as cur:
+        items = review_repo.pending(cur, limit)
+        if not items:
+            typer.echo("No hay nada pendiente.")
+            return
+
+        for index, item in enumerate(items, start=1):
+            typer.echo(f"\n─── {index} de {len(items)} " + "─" * 40)
+            for line in review_flow.describe(item):
+                typer.echo(line)
+            choice = typer.prompt("[a] aprobar · [r] rechazar · [s] saltar · [q] salir", default="s")
+
+            if choice == "q":
+                break
+            if choice == "s":
+                continue
+            if choice == "r":
+                review_repo.decide(cur, item["id"], "rejected", actor)
+                conn.commit()
+                typer.echo("  rechazado")
+                continue
+            try:
+                done = review_flow.approve(cur, item, actor)
+                review_repo.decide(cur, item["id"], "approved", actor)
+                conn.commit()
+                typer.echo(f"  ✓ {done}")
+            except (LookupError, ValueError) as error:
+                conn.rollback()
+                typer.echo(f"  ✗ {error}")
 
 
 @app.command()
