@@ -19,7 +19,9 @@ def test_el_dominio_no_depende_de_la_infraestructura(path: Path) -> None:
 
 
 @pytest.mark.parametrize(
-    "path", _files("domain") + _files("pipeline") + _files("connectors"), ids=lambda p: p.name
+    "path",
+    _files("domain") + _files("pipeline") + _files("connectors") + _files("resolution"),
+    ids=lambda p: p.name,
 )
 def test_el_sql_vive_solo_en_db(path: Path) -> None:
     code = path.read_text().lower()

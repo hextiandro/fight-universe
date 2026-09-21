@@ -10,7 +10,7 @@ from .connectors.wikipedia_events import WikipediaEvents
 from .db.connection import connect, safe_url
 from .db.migrations import run as run_migrations
 from .db.repositories import roles
-from .pipeline import parity, publish, seed_import
+from .pipeline import parity, publish, resolve_event, seed_import
 
 app = typer.Typer(help="Pipeline de datos de UFC Graph", no_args_is_help=True)
 
@@ -73,6 +73,29 @@ def probe(event: str = EVENT_OPTION) -> None:
                 typer.echo(f"    mención: «{mention.text}» → wikipedia: {mention.hints.get('wikipedia')}")
 
     typer.echo(f"\n{len(candidates)} candidatos")
+
+
+@app.command()
+def resolve(event: str = EVENT_OPTION) -> None:
+    """Resuelve las menciones de un evento contra el catálogo, sin escribir nada."""
+    typer.echo(f"Base de datos: {safe_url()}")
+    with connect() as conn:
+        result = resolve_event.run(event, conn)
+
+    typer.echo(f"\nEVENTO  {result.event.get('name')} · {result.event.get('date')}\n")
+    for r in sorted(result.resolutions, key=lambda r: (r.level or 9, r.mention.text)):
+        if r.status == "matched" and not r.needs_review:
+            mark, detail = "✓", f"→ {r.name} · nivel {r.level} · {r.reason}"
+        elif r.status == "matched":
+            mark, detail = "?", f"→ {r.name} (a revisión) · nivel {r.level} · {r.reason}"
+        elif r.status == "ambiguous":
+            options = ", ".join(f"{c.name} ({c.score:.2f})" for c in r.candidates[:3])
+            mark, detail = "?", f"ambiguo · {r.reason} · candidatos: {options}"
+        else:
+            mark, detail = "+", "no está en el catálogo: alta pendiente de aprobación"
+        typer.echo(f"  {mark} «{r.mention.text}» {detail}")
+
+    typer.echo("\n" + " · ".join(f"{k}: {v}" for k, v in result.summary.items()))
 
 
 @app.command()
