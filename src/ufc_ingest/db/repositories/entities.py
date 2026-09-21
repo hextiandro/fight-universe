@@ -80,13 +80,14 @@ def upsert_fight(cur: psycopg.Cursor, fight: Fight) -> None:
         """
         insert into fights
           (id, slug, event_id, date, division_id, status, winner_id, method,
-           method_detail, round, time, title)
-        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+           method_detail, round, time, title, card_position)
+        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         on conflict (id) do update set
           slug = excluded.slug, status = excluded.status,
           winner_id = excluded.winner_id, method = excluded.method,
           method_detail = excluded.method_detail, round = excluded.round,
-          time = excluded.time, title = excluded.title
+          time = excluded.time, title = excluded.title,
+          card_position = excluded.card_position
         """,
         (
             fight.id,
@@ -101,6 +102,7 @@ def upsert_fight(cur: psycopg.Cursor, fight: Fight) -> None:
             fight.round,
             fight.time,
             fight.title,
+            fight.card_position,
         ),
     )
     for corner, fighter_id in enumerate(fight.fighter_ids):

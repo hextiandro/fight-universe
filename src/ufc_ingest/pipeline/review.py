@@ -134,12 +134,16 @@ def _approve_fight(cur: psycopg.Cursor, candidate: dict[str, Any], actor: str) -
     return f"pelea {names[0]} vs {names[1]}"
 
 
-def bulk_approve_new_fighters(cur: psycopg.Cursor, items: list[dict[str, Any]], actor: str) -> list[str]:
+def bulk_approve_new_fighters(
+    cur: psycopg.Cursor, items: list[dict[str, Any]], actor: str, include_unlinked: bool = False
+) -> list[str]:
     """Aprobación en bloque, solo para la carga inicial.
 
-    Se limita a las altas **sin ambigüedad**: peleador desconocido, con su página de
-    Wikipedia y sin candidatos parecidos. Todo lo dudoso sigue pasando por una persona.
-    El actor distinto deja constancia en el registro de qué entró por esta vía.
+    Se limita a las altas **sin ambigüedad**: peleador desconocido y sin candidatos
+    parecidos. Por defecto exige además su página de Wikipedia, que sirve de identificador
+    externo; con `include_unlinked` entran también los que no tienen artículo, habituales
+    en las carteleras preliminares. Todo lo dudoso sigue pasando por una persona, y el
+    actor distinto deja constancia de qué entró por esta vía.
     """
     from ..db.repositories import review as repo
 
@@ -150,7 +154,7 @@ def bulk_approve_new_fighters(cur: psycopg.Cursor, items: list[dict[str, Any]], 
             candidate.get("kind") == "fighter"
             and not candidate.get("candidates")
             and not candidate.get("proposal", {}).get("entityId")
-            and candidate.get("hints", {}).get("wikipedia")
+            and (include_unlinked or candidate.get("hints", {}).get("wikipedia"))
         )
         if not unambiguous:
             continue

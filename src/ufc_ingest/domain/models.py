@@ -90,6 +90,8 @@ class Fight(BaseModel):
     round: int | None = None
     time: str | None = None
     title: TitleStakes | None = None
+    # 0 = estelar. El planeta muestra solo la parte alta; el panel, la cartelera entera.
+    card_position: int = 0
 
 
 class EntityRef(BaseModel):

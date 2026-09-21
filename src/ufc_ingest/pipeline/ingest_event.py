@@ -196,9 +196,9 @@ def _handle_fight(
     fighter_ids = [r.entity_id for r in resolutions if r and r.entity_id]
     slug = f"{_slug(payload['eventTitle'])}-{_slug(names[0]).split('-')[-1]}-{_slug(names[1]).split('-')[-1]}"
     fight_id = make_id("fight", slug)
-    if review_repo.fight_exists(cur, fight_id):
-        report.skipped.append(f"pelea {names[0]} vs {names[1]}")
-        return
+    # Se actualiza siempre: los datos de una pelea cambian (resultado, posición en la
+    # cartelera) y el upsert es idempotente.
+    existed = review_repo.fight_exists(cur, fight_id)
 
     winner = payload.get("winner")
     entities_repo.upsert_fight(
@@ -210,6 +210,7 @@ def _handle_fight(
             date=event_date,
             division_id=payload["divisionId"],
             status=payload.get("status", "completed"),
+            card_position=payload.get("cardPosition", 0),
             fighter_ids=fighter_ids,  # type: ignore[arg-type]
             winner_id=fighter_ids[names.index(winner)] if winner in names else None,
             method=payload["method"],
@@ -230,5 +231,5 @@ def _handle_fight(
         ),
         source_id,
     )
-    review_repo.log(cur, ACTOR, "insert", f"fight:{fight_id}", payload)
-    report.applied.append(f"pelea {names[0]} vs {names[1]}")
+    review_repo.log(cur, ACTOR, "upsert", f"fight:{fight_id}", payload)
+    (report.skipped if existed else report.applied).append(f"pelea {names[0]} vs {names[1]}")

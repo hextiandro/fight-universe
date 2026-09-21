@@ -148,12 +148,15 @@ def refresh_values() -> None:
 
 
 @app.command()
-def bulk_approve(actor: str = BULK_ACTOR_OPTION) -> None:
-    """Carga inicial: aprueba en bloque las altas de peleador sin ambigüedad."""
+def bulk_approve(actor: str = BULK_ACTOR_OPTION, include_unlinked: bool = False) -> None:
+    """Carga inicial: aprueba en bloque las altas de peleador sin ambigüedad.
+
+    Con --include-unlinked entran también los que no tienen página de Wikipedia.
+    """
     typer.echo(f"Base de datos: {safe_url()}")
     with connect() as conn, conn.cursor() as cur:
         items = review_repo.pending(cur, limit=5000)
-        approved = review_flow.bulk_approve_new_fighters(cur, items, actor)
+        approved = review_flow.bulk_approve_new_fighters(cur, items, actor, include_unlinked)
         conn.commit()
         remaining = len(review_repo.pending(cur, limit=5000))
     typer.echo(f"Aprobados en bloque: {len(approved)} · quedan para revisar: {remaining}")
