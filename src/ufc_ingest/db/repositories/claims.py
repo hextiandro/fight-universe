@@ -35,3 +35,43 @@ def record(cur: psycopg.Cursor, claim: Claim, fallback_source: str) -> None:
                 claim.valid_from,
             ),
         )
+
+
+def winning_values(cur: psycopg.Cursor, subject_type: str) -> list[dict]:
+    """Valor vigente de cada campo: gana lo verificado, luego la fuente de más confianza,
+    y a igualdad lo más reciente. Es la regla de conflicto entre fuentes."""
+    cur.execute(
+        """
+        select distinct on (c.subject_id, c.field)
+               c.subject_id, c.field, c.value, c.source_id, s.trust, c.verified
+          from claims c join sources s on s.id = c.source_id
+         where c.subject_type = %s
+         order by c.subject_id, c.field, c.verified desc, s.trust desc, c.created_at desc
+        """,
+        (subject_type,),
+    )
+    return cur.fetchall()
+
+
+def apply_event_values(cur: psycopg.Cursor, event_id: str, values: dict) -> None:
+    cur.execute(
+        """
+        update events set
+          name = coalesce(%s, name), date = coalesce(%s, date),
+          venue = coalesce(%s, venue), city = coalesce(%s, city)
+         where id = %s
+        """,
+        (values.get("name"), values.get("date"), values.get("venue"), values.get("city"), event_id),
+    )
+
+
+def apply_fighter_values(cur: psycopg.Cursor, fighter_id: str, values: dict) -> None:
+    cur.execute(
+        """
+        update fighters set
+          name = coalesce(%s, name), nationality = coalesce(%s, nationality),
+          division_id = coalesce(%s, division_id), updated_at = now()
+         where id = %s
+        """,
+        (values.get("name"), values.get("nationality"), values.get("division"), fighter_id),
+    )

@@ -11,11 +11,22 @@ from .db.connection import connect, safe_url
 from .db.migrations import run as run_migrations
 from .db.repositories import review as review_repo
 from .db.repositories import roles
-from .pipeline import ingest_event, parity, publish, resolve_event, seed_import
+from .pipeline import (
+    ingest_event,
+    ingest_window,
+    materialize,
+    parity,
+    publish,
+    resolve_event,
+    seed_import,
+)
 from .pipeline import review as review_flow
 
 app = typer.Typer(help="Pipeline de datos de UFC Graph", no_args_is_help=True)
 
+BULK_ACTOR_OPTION = typer.Option(
+    "human:bulk", "--actor", help="Queda en el registro: distingue lo aprobado en bloque"
+)
 ACTOR_OPTION = typer.Option("human", "--actor", help="Quién revisa (queda en el registro)")
 EVENT_OPTION = typer.Option(..., "--event", help='Título en Wikipedia, p. ej. "UFC 327"')
 WEB_ROLE_OPTION = typer.Option("ufc_web", "--role", help="Usuario de solo lectura de la web")
@@ -115,6 +126,40 @@ def ingest(event: str = EVENT_OPTION) -> None:
 
 
 @app.command()
+def ingest_all(months: int = 6) -> None:
+    """Ingiere todos los eventos de la ventana (por defecto, 6 meses y los anunciados)."""
+    typer.echo(f"Base de datos: {safe_url()}")
+    with connect() as conn:
+        totals = ingest_window.run(
+            conn,
+            months=months,
+            on_event=lambda title, report: typer.echo(f"  {title}: {report.line()}"),
+        )
+    typer.echo("\n" + " · ".join(f"{k}: {v}" for k, v in totals.items()))
+
+
+@app.command()
+def refresh_values() -> None:
+    """Recalcula el valor vigente de cada entidad según la confianza de sus fuentes."""
+    typer.echo(f"Base de datos: {safe_url()}")
+    with connect() as conn:
+        counts = materialize.run(conn)
+    typer.echo(" · ".join(f"{k}: {v}" for k, v in counts.items()))
+
+
+@app.command()
+def bulk_approve(actor: str = BULK_ACTOR_OPTION) -> None:
+    """Carga inicial: aprueba en bloque las altas de peleador sin ambigüedad."""
+    typer.echo(f"Base de datos: {safe_url()}")
+    with connect() as conn, conn.cursor() as cur:
+        items = review_repo.pending(cur, limit=5000)
+        approved = review_flow.bulk_approve_new_fighters(cur, items, actor)
+        conn.commit()
+        remaining = len(review_repo.pending(cur, limit=5000))
+    typer.echo(f"Aprobados en bloque: {len(approved)} · quedan para revisar: {remaining}")
+
+
+@app.command()
 def review(actor: str = ACTOR_OPTION, limit: int = 50) -> None:
     """Revisa lo pendiente: [a] aprobar · [r] rechazar · [s] saltar · [q] salir."""
     with connect() as conn, conn.cursor() as cur:
@@ -191,7 +236,7 @@ def publish_graph(out: Path = OUT_OPTION) -> None:
 
 @app.command()
 def verify_parity(seed: Path = SEED_OPTION) -> None:
-    """Comprueba que el grafo reconstruido es idéntico al dataset semilla."""
+    """Comprueba que el dataset semilla sigue intacto (lo nuevo no se cuenta)."""
     with connect() as conn:
         rebuilt = publish.build(conn)
     problems = parity.compare(seed, rebuilt)
@@ -201,7 +246,7 @@ def verify_parity(seed: Path = SEED_OPTION) -> None:
         for p in problems[:25]:
             typer.echo(f"  {p}")
         raise typer.Exit(1)
-    typer.echo("✓ El grafo reconstruido es idéntico al dataset semilla")
+    typer.echo("✓ El dataset semilla sigue intacto en el grafo")
 
 
 if __name__ == "__main__":

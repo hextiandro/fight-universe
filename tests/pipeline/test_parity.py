@@ -32,6 +32,32 @@ def test_detecta_faltante_sobrante_y_diferencia(tmp_path: Path) -> None:
         "events": [{"id": "e2", "name": "E", "date": "2026-01-01"}],
     }
     problems = parity.compare(_seed_file(tmp_path), rebuilt)
-    assert "fighters: difiere a" in problems
-    assert "events: sobra e2" in problems
+    assert "fighters: difiere en a" in problems
     assert "events: falta e1" in problems
+    # Lo que la ingestión añade no es un problema: e2 no se reporta.
+    assert not any("e2" in p for p in problems)
+
+
+def test_una_fuente_extra_no_es_regresion(tmp_path: Path) -> None:
+    """Que otra fuente corrobore el dato es lo que buscamos, no un problema."""
+    seed = {"events": [{"id": "e1", "name": "E", "provenance": {"sourceIds": ["espn"], "verified": True}}]}
+    path = tmp_path / "seed.json"
+    path.write_text(json.dumps(seed))
+    rebuilt = {
+        "events": [
+            {"id": "e1", "name": "E", "provenance": {"sourceIds": ["espn", "wikipedia"], "verified": True}}
+        ]
+    }
+    assert parity.compare(path, rebuilt) == []
+
+
+def test_perder_una_fuente_si_lo_es(tmp_path: Path) -> None:
+    seed = {"events": [{"id": "e1", "name": "E", "provenance": {"sourceIds": ["espn"], "verified": True}}]}
+    path = tmp_path / "seed.json"
+    path.write_text(json.dumps(seed))
+    rebuilt = {
+        "events": [{"id": "e1", "name": "E", "provenance": {"sourceIds": ["wikipedia"], "verified": False}}]
+    }
+    problems = parity.compare(path, rebuilt)
+    assert any("pierde fuentes espn" in p for p in problems)
+    assert any("deja de estar verificado" in p for p in problems)

@@ -35,7 +35,7 @@ def describe(item: dict[str, Any]) -> list[str]:
     elif kind == "fight":
         p = candidate
         detail = f" ({p['methodDetail']})" if p.get("methodDetail") else ""
-        winner = f"gana {p['winner']}" if p.get("winner") else "sin resultado"
+        winner = f"gana {p['winner']}" if p.get("winner") else "programada"
         lines.append(f"PELEA  {p['fighters'][0]} vs {p['fighters'][1]} · {p['divisionId']}")
         lines.append(f"  {p['method']}{detail} · R{p.get('round')} · {p.get('time')} · {winner}")
     else:
@@ -132,3 +132,28 @@ def _approve_fight(cur: psycopg.Cursor, candidate: dict[str, Any], actor: str) -
     )
     review_repo.log(cur, actor, "insert", f"fight:{fight_id}", {"fighters": names})
     return f"pelea {names[0]} vs {names[1]}"
+
+
+def bulk_approve_new_fighters(cur: psycopg.Cursor, items: list[dict[str, Any]], actor: str) -> list[str]:
+    """Aprobación en bloque, solo para la carga inicial.
+
+    Se limita a las altas **sin ambigüedad**: peleador desconocido, con su página de
+    Wikipedia y sin candidatos parecidos. Todo lo dudoso sigue pasando por una persona.
+    El actor distinto deja constancia en el registro de qué entró por esta vía.
+    """
+    from ..db.repositories import review as repo
+
+    approved = []
+    for item in items:
+        candidate = item["candidate"]
+        unambiguous = (
+            candidate.get("kind") == "fighter"
+            and not candidate.get("candidates")
+            and not candidate.get("proposal", {}).get("entityId")
+            and candidate.get("hints", {}).get("wikipedia")
+        )
+        if not unambiguous:
+            continue
+        approved.append(approve(cur, item, actor))
+        repo.decide(cur, item["id"], "approved", actor)
+    return approved

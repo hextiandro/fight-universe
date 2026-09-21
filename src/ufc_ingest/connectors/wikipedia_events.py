@@ -12,7 +12,7 @@ import hashlib
 import os
 import re
 from collections.abc import Iterable
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -70,9 +70,52 @@ class WikipediaEvents:
             fetched_at=datetime.now(),
         )
 
-    def fetch(self, since: datetime | None = None) -> Iterable[RawDoc]:  # pragma: no cover
-        """La lista de eventos de la ventana llega en el siguiente paso."""
-        raise NotImplementedError("Todavía solo se leen eventos concretos con fetch_page()")
+    LIST_PAGE = "List of UFC events"
+
+    def window(self, months: int = 6, today: date | None = None) -> list[dict[str, str]]:
+        """Eventos de los últimos `months` meses y los ya anunciados.
+
+        La ventana acotada es lo que mantiene el planeta legible: el histórico completo
+        son más de 700 eventos.
+        """
+        today = today or date.today()
+        floor = today - timedelta(days=months * 30)
+        doc = self.fetch_page(self.LIST_PAGE)
+        soup = BeautifulSoup(doc.payload["html"], "lxml")
+
+        found: dict[str, dict[str, str]] = {}
+        for table in soup.find_all("table"):
+            headers = [th.get_text(" ", strip=True).lower() for th in table.find_all("th")]
+            if "event" not in headers or "date" not in headers:
+                continue
+            offset = headers.index("event")  # la tabla de pasados lleva una columna "#" delante
+            for row in table.find_all("tr"):
+                cells = row.find_all("td")
+                if len(cells) < offset + 2:
+                    continue
+                event = self._event_row(cells[offset], cells[offset + 1])
+                if event and floor <= date.fromisoformat(event["date"]):
+                    found.setdefault(event["title"], event)
+        return sorted(found.values(), key=lambda e: e["date"])
+
+    @staticmethod
+    def _event_row(name_cell: Tag, date_cell: Tag) -> dict[str, str] | None:
+        link = name_cell.find("a")
+        title = link.get("title") if isinstance(link, Tag) else None
+        if not isinstance(title, str):
+            return None
+        raw = date_cell.get_text(" ", strip=True)
+        for fmt in ("%b %d, %Y", "%B %d, %Y"):
+            try:
+                return {"title": title, "date": datetime.strptime(raw, fmt).date().isoformat()}
+            except ValueError:
+                continue
+        return None
+
+    def fetch(self, since: datetime | None = None) -> Iterable[RawDoc]:
+        """Descarga las páginas de los eventos de la ventana."""
+        for event in self.window():
+            yield self.fetch_page(event["title"])
 
     def extract(self, doc: RawDoc) -> Iterable[Candidate]:
         soup = BeautifulSoup(doc.payload["html"], "lxml")
@@ -162,6 +205,7 @@ class WikipediaEvents:
         winner = names[0]["text"] if outcome.startswith("def") else None
         return {
             "payload": {
+                "status": "completed" if method else "scheduled",
                 "divisionId": division,
                 "fighters": [n["text"] for n in names],
                 "winner": winner,

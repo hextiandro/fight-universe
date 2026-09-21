@@ -72,6 +72,9 @@ class Event(BaseModel):
     city: str | None = None
 
 
+FightStatus = Literal["scheduled", "completed"]
+
+
 class Fight(BaseModel):
     id: str
     slug: str
@@ -79,8 +82,10 @@ class Fight(BaseModel):
     date: date
     division_id: str
     fighter_ids: list[str]
+    # Una pelea anunciada aún no tiene resultado: eso no la hace menos real.
+    status: FightStatus = "completed"
     winner_id: str | None = None
-    method: FightMethod
+    method: FightMethod | None = None
     method_detail: str | None = None
     round: int | None = None
     time: str | None = None

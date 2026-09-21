@@ -67,9 +67,12 @@ def parse_division(text: str) -> str | None:
     return DIVISIONS.get(key) or DIVISIONS.get(key.replace("catchweight", "").strip())
 
 
-def parse_method(text: str) -> tuple[FightMethod, str | None]:
+def parse_method(text: str) -> tuple[FightMethod | None, str | None]:
     """ "KO (punches)" → ("KO/TKO", "puñetazos"). El detalle se conserva traducido."""
     lowered = text.lower().strip()
+    # Una pelea anunciada trae la casilla vacía o un guion: todavía no hay resultado.
+    if not lowered or lowered in {"-", "–", "—", "n/a", "tba"}:
+        return None, None
     method: FightMethod | None = None
     for pattern, value in METHOD_PATTERNS:
         if re.search(pattern, lowered):

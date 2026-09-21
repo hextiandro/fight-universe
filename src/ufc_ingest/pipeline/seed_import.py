@@ -84,7 +84,21 @@ class SeedMapper:
                 division_id=f["divisionId"],
                 aliases=f.get("aliases", []),
             )
-            facts: list[Claim] = []
+            facts: list[Claim] = [
+                Claim(
+                    subject_type="fighter",
+                    subject_id=fid,
+                    field=field,
+                    value=value,
+                    provenance=Provenance(source_ids=[MANUAL_SOURCE], verified=True),
+                )
+                for field, value in (
+                    ("name", f["name"]),
+                    ("division", f["divisionId"]),
+                    ("nationality", f.get("nationality")),
+                )
+                if value is not None
+            ]
             if record := f.get("record"):
                 facts.append(
                     Claim(
@@ -121,14 +135,18 @@ class SeedMapper:
                 venue=e.get("venue"),
                 city=e.get("city"),
             )
-            fact = Claim(
-                subject_type="event",
-                subject_id=eid,
-                field="existence",
-                value={"name": e["name"], "date": e["date"]},
-                provenance=self.provenance(e["provenance"]),
-            )
-            out.append((event, [fact]))
+            provenance = self.provenance(e["provenance"])
+            facts = [
+                Claim(subject_type="event", subject_id=eid, field=field, value=value, provenance=provenance)
+                for field, value in (
+                    ("name", e["name"]),
+                    ("date", e["date"]),
+                    ("venue", e.get("venue")),
+                    ("city", e.get("city")),
+                )
+                if value is not None
+            ]
+            out.append((event, facts))
         return out
 
     def fights(self) -> list[tuple[Fight, list[Claim]]]:

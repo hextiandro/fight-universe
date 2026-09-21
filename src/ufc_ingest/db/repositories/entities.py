@@ -79,11 +79,12 @@ def upsert_fight(cur: psycopg.Cursor, fight: Fight) -> None:
     cur.execute(
         """
         insert into fights
-          (id, slug, event_id, date, division_id, winner_id, method,
+          (id, slug, event_id, date, division_id, status, winner_id, method,
            method_detail, round, time, title)
-        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         on conflict (id) do update set
-          slug = excluded.slug, winner_id = excluded.winner_id, method = excluded.method,
+          slug = excluded.slug, status = excluded.status,
+          winner_id = excluded.winner_id, method = excluded.method,
           method_detail = excluded.method_detail, round = excluded.round,
           time = excluded.time, title = excluded.title
         """,
@@ -93,6 +94,7 @@ def upsert_fight(cur: psycopg.Cursor, fight: Fight) -> None:
             fight.event_id,
             fight.date,
             fight.division_id,
+            fight.status,
             fight.winner_id,
             fight.method,
             fight.method_detail,

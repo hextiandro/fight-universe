@@ -121,17 +121,25 @@ def _apply_event(
             city=payload.get("city"),
         ),
     )
-    claims_repo.record(
-        cur,
-        Claim(
-            subject_type="event",
-            subject_id=event_id,
-            field="existence",
-            value={"name": payload["name"], "date": payload["date"]},
-            provenance=Provenance(source_ids=[source_id], verified=False),
-        ),
-        source_id,
-    )
+    provenance = Provenance(source_ids=[source_id], verified=False)
+    for claim_field, value in (
+        ("name", payload["name"]),
+        ("date", payload["date"]),
+        ("venue", payload.get("venue")),
+        ("city", payload.get("city")),
+    ):
+        if value is not None:
+            claims_repo.record(
+                cur,
+                Claim(
+                    subject_type="event",
+                    subject_id=event_id,
+                    field=claim_field,
+                    value=value,
+                    provenance=provenance,
+                ),
+                source_id,
+            )
     (report.skipped if existing else report.applied).append(f"evento {payload['name']}")
     review_repo.log(cur, ACTOR, "upsert", f"event:{event_id}", payload)
     return event_id
@@ -199,8 +207,9 @@ def _handle_fight(
             id=fight_id,
             slug=slug,
             event_id=event_id,
-            date=payload["date"],
+            date=event_date,
             division_id=payload["divisionId"],
+            status=payload.get("status", "completed"),
             fighter_ids=fighter_ids,  # type: ignore[arg-type]
             winner_id=fighter_ids[names.index(winner)] if winner in names else None,
             method=payload["method"],
@@ -216,7 +225,7 @@ def _handle_fight(
             subject_id=fight_id,
             field="result",
             value={"winner": winner, "method": payload["method"], "round": payload.get("round")},
-            valid_from=payload["date"],
+            valid_from=event_date,
             provenance=Provenance(source_ids=[source_id], verified=False),
         ),
         source_id,
