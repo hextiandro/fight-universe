@@ -6,6 +6,7 @@ from pathlib import Path
 
 import typer
 
+from .connectors.wikipedia_events import WikipediaEvents
 from .db.connection import connect, safe_url
 from .db.migrations import run as run_migrations
 from .db.repositories import roles
@@ -13,6 +14,7 @@ from .pipeline import parity, publish, seed_import
 
 app = typer.Typer(help="Pipeline de datos de UFC Graph", no_args_is_help=True)
 
+EVENT_OPTION = typer.Option(..., "--event", help='Título en Wikipedia, p. ej. "UFC 327"')
 WEB_ROLE_OPTION = typer.Option("ufc_web", "--role", help="Usuario de solo lectura de la web")
 SEED_OPTION = typer.Option(..., "--from", help="Ruta a seed.json exportado por la web")
 OUT_OPTION = typer.Option(None, "--out", help="Escribe el grafo publicado en un archivo")
@@ -44,6 +46,33 @@ def status() -> None:
         for table in TABLES:
             cur.execute(f"select count(*) as n from {table}")  # noqa: S608 - lista fija
             typer.echo(f"  {table:<16} {cur.fetchone()['n']}")
+
+
+@app.command()
+def probe(event: str = EVENT_OPTION) -> None:
+    """Lee un evento de Wikipedia y muestra lo que entiende, sin tocar la base de datos."""
+    connector = WikipediaEvents()
+    doc = connector.fetch_page(event)
+    typer.echo(f"Documento: {doc.url} · hash {doc.hash[:8]}")
+
+    candidates = list(connector.extract(doc))
+    for candidate in candidates:
+        if candidate.kind == "event":
+            p = candidate.payload
+            typer.echo(f"\nEVENTO  {p['name']} · {p['date']} · {p.get('venue')} · {p.get('city')}")
+            continue
+        p = candidate.payload
+        detail = f" ({p['methodDetail']})" if p.get("methodDetail") else ""
+        result = f"gana {p['winner']}" if p.get("winner") else "sin resultado"
+        typer.echo(
+            f"\n{p['cardPosition'] + 1:>2}. {p['fighters'][0]} vs {p['fighters'][1]} · {p['divisionId']}"
+            f"\n    {p['method']}{detail} · R{p.get('round')} · {p.get('time')} · {result}"
+        )
+        for mention in candidate.mentions:
+            if mention.entity_type == "fighter":
+                typer.echo(f"    mención: «{mention.text}» → wikipedia: {mention.hints.get('wikipedia')}")
+
+    typer.echo(f"\n{len(candidates)} candidatos")
 
 
 @app.command()
