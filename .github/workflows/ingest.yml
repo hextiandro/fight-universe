@@ -1,0 +1,56 @@
+name: Ingesta
+
+# Los eventos son los sábados por la noche en horario de EEUU, así que a las 09:00 UTC
+# del día siguiente Wikipedia ya tiene los resultados. Se ejecuta a diario porque también
+# entran peleas anunciadas y cambios de cartelera entre semana.
+on:
+  schedule:
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+    inputs:
+      months:
+        description: "Meses de ventana hacia atrás"
+        default: "6"
+
+# Dos ingestas a la vez se pisarían escribiendo los mismos hechos. Las que lleguen
+# mientras una corre esperan, no se cancelan: perder una ejecución es perder un día.
+concurrency:
+  group: ingest
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      # Wikimedia rechaza con 403 los agentes sin un contacto real.
+      WIKIMEDIA_CONTACT: ${{ vars.WIKIMEDIA_CONTACT || 'https://github.com/hextiandro/fight-universe' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+
+      # Primero las migraciones: una ingesta contra un esquema viejo falla a mitad y deja
+      # el trabajo hecho a medias.
+      - name: Migrar el esquema
+        run: uv run ufc-ingest migrate-db
+
+      - name: Ingerir la ventana
+        run: uv run ufc-ingest ingest-all --months ${{ github.event.inputs.months || '6' }}
+
+      # Lo ingerido son claims; el valor vigente se decide por confianza de la fuente.
+      - name: Recalcular los valores vigentes
+        run: uv run ufc-ingest refresh-values
+
+      - name: Resumen
+        if: always()
+        run: |
+          {
+            echo '## Estado tras la ingesta'
+            echo '```'
+            uv run ufc-ingest status
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
